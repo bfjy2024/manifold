@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>胡克铰位移流形 · 浸入环面 · 直观可视化</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #111;
+            color: white;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(10, 10, 20, 0.75);
+            backdrop-filter: blur(8px);
+            padding: 16px 24px;
+            border-radius: 16px;
+            border-left: 4px solid #ffaa44;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+            pointer-events: none;
+            z-index: 100;
+        }
+        #info h1 {
+            margin: 0 0 6px 0;
+            font-size: 1.6rem;
+            font-weight: 500;
+            letter-spacing: 1px;
+            color: #ffaa44;
+        }
+        #info p {
+            margin: 4px 0;
+            font-size: 0.9rem;
+            opacity: 0.9;
+            color: #ddd;
+        }
+        #info .highlight {
+            color: #ffaa44;
+            font-weight: 600;
+        }
+        #note {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            text-align: center;
+            color: #aaa;
+            font-size: 0.85rem;
+            background: rgba(0,0,0,0.4);
+            padding: 8px;
+            border-radius: 30px;
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            pointer-events: none;
+        }
+        .controls-hint {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(30,30,40,0.7);
+            backdrop-filter: blur(4px);
+            padding: 10px 16px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            color: #ccc;
+            border: 1px solid #444;
+            z-index: 100;
+            pointer-events: none;
+        }
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(20,20,30,0.8);
+            backdrop-filter: blur(8px);
+            padding: 16px 20px;
+            border-radius: 16px;
+            border: 1px solid #333;
+            font-size: 0.85rem;
+            z-index: 100;
+            pointer-events: none;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .legend-color.gold { background: #ffaa44; box-shadow: 0 0 10px #ffaa44; }
+        .legend-color.cyan { background: #44ccff; box-shadow: 0 0 10px #44ccff; }
+        .legend-color.red { background: #ff4466; box-shadow: 0 0 10px #ff4466; }
+        .legend-color.purple { background: #aa66ff; box-shadow: 0 0 10px #aa66ff; }
+        .legend-text {
+            color: #ddd;
+        }
+        .legend-text small {
+            color: #888;
+            display: block;
+            font-size: 0.7rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>胡克铰位移流形</h1>
+        <p>参数空间 <span class="highlight">T²</span> → 浸入像 · 两条奇异线</p>
+        <p style="font-size:0.8rem; opacity:0.7;">θ₁ 外轴旋转 · θ₂ 内轴旋转</p>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color gold"></div>
+            <div class="legend-text">位移流形 (浸入像)<small>光滑处 · 局部二维</small></div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color cyan"></div>
+            <div class="legend-text">参数网格 (θ₁, θ₂)<small>映射到SO(3)</small></div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color red"></div>
+            <div class="legend-text">奇异线 θ₂=0 / π<small>被捏扁 · 退化</small></div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color purple"></div>
+            <div class="legend-text">旋转轴示意<small>外轴固定 · 内轴随动</small></div>
+        </div>
+    </div>
+
+    <div class="controls-hint">拖动旋转 · 滚轮缩放</div>
+    <div id="note">被捏扁的甜甜圈 —— 两条奇异线上，二维退化为一维</div>
+
+    <!-- 引入 Three.js 核心库和辅助库 -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.126.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.126.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        // --- 初始化场景 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a14);
+        // 添加一点星空的氛围 (简单通过一些远处的点)
+        // 实际上我们用雾效和背景色营造深邃感
+
+        // --- 相机 ---
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 3, 8);
+        camera.lookAt(1.5, 0, 0);
+
+        // --- 渲染器 WebGL ---
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = false;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // --- 渲染器 CSS2D (用于标签) ---
+        const labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0px';
+        labelRenderer.domElement.style.left = '0px';
+        labelRenderer.domElement.style.pointerEvents = 'none'; // 让标签不阻挡鼠标操作
+        document.body.appendChild(labelRenderer.domElement);
+
+        // --- 轨道控制器 ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.rotateSpeed = 0.8;
+        controls.zoomSpeed = 1.2;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.8;
+        controls.enableZoom = true;
+        controls.target.set(1.5, 0, 0);
+
+        // --- 灯光 ---
+        // 环境光
+        const ambientLight = new THREE.AmbientLight(0x404060);
+        scene.add(ambientLight);
+
+        // 主光源 - 暖色前侧光
+        const light1 = new THREE.PointLight(0xffaa66, 1.2, 30);
+        light1.position.set(2, 5, 5);
+        scene.add(light1);
+
+        // 冷色背光
+        const light2 = new THREE.PointLight(0x4466ff, 0.8, 30);
+        light2.position.set(-3, 1, -5);
+        scene.add(light2);
+
+        // 顶光
+        const light3 = new THREE.DirectionalLight(0xffffff, 0.6);
+        light3.position.set(1, 3, 2);
+        scene.add(light3);
+
+        // 添加一些辅助光使体积感更强
+        const fillLight = new THREE.PointLight(0x8866ff, 0.4);
+        fillLight.position.set(4, -1, 3);
+        scene.add(fillLight);
+
+        // --- 辅助地面网格 (非常淡，仅用于空间参考) ---
+        const gridHelper = new THREE.GridHelper(12, 20, 0x334466, 0x223344);
+        gridHelper.position.y = -2.5;
+        scene.add(gridHelper);
+
+        // --- 核心可视化：胡克铰位移流形（浸入环面）---
+
+        // 我们构建一个环面几何体，但对其进行“捏扁”变形，使其在两条线处退化。
+        // 为了视觉上看起来像被捏扁的甜甜圈，并且直观显示两条奇异线，
+        // 我们使用一个标准的环面几何体，然后通过修改顶点位置，在v=0和v=π附近压扁。
+        // 同时，为了强调浸入像的感觉，我们让它在视觉上有些自交或重叠的错觉？不需要自交，只需压扁即可。
+        // 参数空间是(θ1, θ2)，对应环面的两个角度：u (大圈) 和 v (小圈)。
+        // 通常环面参数: x = (R + r cos v) cos u, y = (R + r cos v) sin u, z = r sin v
+        // 我们想让 v=0 和 v=π 处（即内圈的两个极端）退化：让该处的半径变化？实际上压扁的效果是：在v=0时，整个环面的“管”的截面变成一个点？不，是让两个方向重合。
+        // 为了视觉上表示“捏扁”，我们可以在v=0和π处将环面的小半径r变成0，这样管子就收缩成一条线。但这样看起来就像两个点连成的线？实际上环面会变成像“双锥”或“捏扁的管子”。
+        // 但这样太极端了，看起来不像环面了。另一种方式：让环面在v=0和π处沿一个方向压扁，但保留宽度，看起来像被手指捏扁。我们可以让环面的截面在v接近0或π时变成非常扁的椭圆。
+        // 为了视觉上好看且直观，我决定：保持环面形状，但在v=0和π处用红色的细环线标记为“奇异线”，并且让环面的这些区域颜色变红或发亮，而不是真的几何上完全退化（那样看起来不美观）。
+        // 再加上一个半透明的参数网格覆盖，表示映射。
+        
+        // 所以，我们创建：
+        // 1. 一个标准环面几何体，但使用自定义着色器或顶点颜色，让它有渐变效果，并且在奇异线附近颜色变红。
+        // 2. 两条红色的奇异线（在环面上对应v=0和v=π的圆）。
+        // 3. 半透明的网格线条表示参数网格。
+        // 4. 一些流动的光点表示映射。
+
+        // 定义环面参数
+        const R = 1.8;      // 大半径
+        const r = 0.9;      // 小半径
+        const tubularSegments = 120;  // 大圈分段
+        const radialSegments = 60;    // 小圈分段
+
+        // 创建环面几何体
+        const torusGeo = new THREE.TorusGeometry(R, r, radialSegments, tubularSegments);
+
+        // 顶点颜色：基于角度v (小圈角度) 来设置颜色，使奇异线附近变红
+        // TorusGeometry 的顶点顺序：对于每个 (tubularSegments+1) * (radialSegments+1) 个顶点
+        // 其中u是绕大圈的角度 (0 to 2pi)，v是绕小圈的角度 (0 to 2pi)。
+        // 在几何体中，顶点坐标已经计算好。我们可以通过位置反推v：z = r * sin(v) => v = asin(z/r) (但需要注意象限)
+        // 更好的办法：直接使用顶点法线或根据位置计算v？简单起见，我们通过顶点在y轴方向？不，还是直接遍历顶点并根据其位置计算角度v。
+        // 由于环面几何体是参数化生成的，我们可以通过顶点的位置来计算v：v = atan2(z, x - R? 不对，需要根据局部坐标系)
+        // 标准 TorusGeometry 顶点生成: 
+        // x = (R + r * cos(v)) * cos(u)
+        // y = (R + r * cos(v)) * sin(u)
+        // z = r * sin(v)
+        // 所以 v = atan2(z, r * cos? 实际上 r*cos(v) = sqrt(x^2+y^2) - R  (带符号？)
+        // 有：radial = sqrt(x^2 + y^2) - R = r * cos(v)
+        // 所以 v = atan2(z, radial)
+        // 这样可以计算出v。
+        
+        const positionAttribute = torusGeo.attributes.position;
+        const vertexCount = positionAttribute.count;
+        const colors = [];
+
+        // 用来存储每条顶点的v角度，方便后续
+        const vAngles = [];
+
+        for (let i = 0; i < vertexCount; i++) {
+            const ix = positionAttribute.getX(i);
+            const iy = positionAttribute.getY(i);
+            const iz = positionAttribute.getZ(i);
+
+            const radial = Math.sqrt(ix*ix + iy*iy) - R;
+            // 计算v角度，范围 -pi 到 pi
+            let v = Math.atan2(iz, radial);
+            // 归一化到 [0, 2pi) 便于判断
+            if (v < 0) v += Math.PI * 2;
+            vAngles.push(v);
+
+            // 奇异线位于 v=0 和 v=π (以及2π)
+            // 我们计算一个权重：越接近0或π，越红
+            const distTo0 = Math.min(v, 2*Math.PI - v); // 距离0的角距离
+            const distToPi = Math.abs(v - Math.PI);
+            const minDist = Math.min(distTo0, distToPi);
+            // 最大距离是pi/2？实际上从0到pi是pi，从pi到2pi也是pi，所以最大值是pi/2? 不对，距离0最远是pi（在pi处），但我们同时考虑0和pi，所以最小距离最大是pi/2? 
+            // 对于v在[0,2pi)，到0的距离是min(v, 2pi-v)，到pi的距离是|v-pi|。两个距离的最小值在v=pi/2时是pi/2，v=3pi/2时也是pi/2。
+            // 所以minDist范围是0到pi/2。
+            const t = Math.min(minDist / (Math.PI/2), 1.0); // 0到1，0表示在奇异线上，1表示最远
+            
+            // 颜色从红色(奇异) 到 金色(正常)
+            // 红色: #ff4466, 金色: #ffaa44
+            const red = 1.0;
+            const green = 0.27 + 0.4 * t; // 0.27 -> 0.67
+            const blue = 0.4 * (1 - t);   // 0.4 -> 0
+            
+            colors.push(red, green, blue);
+        }
+
+        torusGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+        // 材质：使用顶点颜色，并添加一些光泽
+        const torusMat = new THREE.MeshPhongMaterial({
+            vertexColors: true,
+            emissive: new THREE.Color(0x221100),
+            shininess: 30,
+            transparent: true,
+            opacity: 0.85,
+            side: THREE.DoubleSide, // 双面渲染，便于看到内部结构
+            flatShading: false
+        });
+
+        const torusMesh = new THREE.Mesh(torusGeo, torusMat);
+        torusMesh.position.set(1.5, 0, 0); // 整体偏移到视野中心
+        torusMesh.rotation.x = Math.PI / 2; // 让环面平躺？不，让它竖起来一点更好看？为了让视觉更明显，我们可以旋转一下。
+        // 原本TorusGeometry是XY平面上的环，中心在原点。旋转使Z轴朝上。
+        torusMesh.rotation.x = 0; // 保持默认，环面在XY平面，Z轴是厚度方向。为了让视角更好看，可以稍微倾斜。
+        torusMesh.rotation.y = 0.3;
+        torusMesh.rotation.z = 0.2;
+        scene.add(torusMesh);
+
+        // --- 添加两条红色的奇异线（实际上是环面上的两个圆）---
+        // 在参数空间，奇异线对应 v=0 和 v=π。在环面上，v=0 是外赤道（实际上v=0时，r*cos(v)=r，所以半径最大；v=π时，r*cos(v)=-r，半径最小，即内赤道）
+        // 但根据我们的坐标，v=0对应z=0，radius = R + r，即外圈；v=π对应z=0，radius = R - r，即内圈。
+        // 所以奇异线是环面的外赤道和内赤道。注意内赤道可能被遮挡，所以用亮红色线。
+        
+        // 外赤道 (v=0)
+        const outerPoints = [];
+        const innerPoints = [];
+        const segments = 128;
+        for (let i = 0; i <= segments; i++) {
+            const u = (i / segments) * Math.PI * 2;
+            // 外赤道: v=0
+            const xOut = (R + r) * Math.cos(u);
+            const yOut = (R + r) * Math.sin(u);
+            const zOut = 0;
+            outerPoints.push(new THREE.Vector3(xOut, yOut, zOut));
+            // 内赤道: v=π
+            const xIn = (R - r) * Math.cos(u);
+            const yIn = (R - r) * Math.sin(u);
+            const zIn = 0;
+            innerPoints.push(new THREE.Vector3(xIn, yIn, zIn));
+        }
+
+        const outerLineGeo = new THREE.BufferGeometry().setFromPoints(outerPoints);
+        const innerLineGeo = new THREE.BufferGeometry().setFromPoints(innerPoints);
+
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xff4466, linewidth: 1 }); // linewidth not supported everywhere
+        // 使用 LineDashed? 不，用 LineBasic 即可，但为了更亮，可以添加发光效果通过额外的大线条？或者使用TubeGeometry？简单起见，加一个发光的光晕。
+        // 为了美观，我们使用 TubeGeometry 来做一个细管，更明显。
+        const outerTubeGeo = new THREE.TubeGeometry(
+            new THREE.CatmullRomCurve3(outerPoints, true), 200, 0.04, 8, false
+        );
+        const innerTubeGeo = new THREE.TubeGeometry(
+            new THREE.CatmullRomCurve3(innerPoints, true), 200, 0.04, 8, false
+        );
+        
+        const redMat = new THREE.MeshStandardMaterial({
+            color: 0xff4466,
+            emissive: 0x441122,
+            roughness: 0.3,
+            metalness: 0.2
+        });
+
+        const outerTube = new THREE.Mesh(outerTubeGeo, redMat);
+        const innerTube = new THREE.Mesh(innerTubeGeo, redMat);
+        torusMesh.add(outerTube); // 作为torusMesh的子元素，随其旋转
+        torusMesh.add(innerTube);
+
+        // 也可以添加细的线框叠加，但已经有了。
+
+        // --- 添加半透明的参数网格 (线条) 来显示映射 ---
+        // 我们创建一个网格环面线框，但不要覆盖整个，只加一些稀疏的线条，并且用青色发光。
+        const wireframeGeo = new THREE.TorusGeometry(R, r, 24, 48); // 较少分段，显示网格
+        const wireframeMat = new THREE.MeshBasicMaterial({
+            color: 0x44ccff,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.15
+        });
+        const wireframeMesh = new THREE.Mesh(wireframeGeo, wireframeMat);
+        wireframeMesh.position.copy(torusMesh.position);
+        wireframeMesh.rotation.copy(torusMesh.rotation);
+        scene.add(wireframeMesh);
+
+        // 另外加一些流动的光点，表示映射的路径? 可以省略，保持简洁。
+
+        // --- 可视化旋转轴 (紫色) ---
+        // 外轴固定，用一个长箭头表示；内轴随动，用一个小箭头表示。
+        // 但胡克铰的轴是变化的，为了视觉美观，我们画一个固定的外轴和几个内轴方向示意。
+        // 外轴 (固定) - 沿Y轴? 或X轴? 为了不与环面重叠，我们放在环面中心附近。
+        // 环面中心在 (1.5, 0, 0)，但旋转轴是抽象的，我们可以在旁边画一个小的轴示意。
+        // 为了不干扰主体，我们在环面旁边画一个小的十字轴。
+        // 但为了直观，在环面中心位置画一个小的坐标轴？
+        // 我们可以在环面内部画一个垂直的轴表示外轴，但环面是透明的，可以看见。
+        // 干脆在环面的“洞”中画一个垂直的紫色轴。
+        
+        const axisGroup = new THREE.Group();
+        axisGroup.position.set(1.5, 0, 0);
+        
+        // 外轴 (固定轴) - 沿Y轴方向，用紫色半透明圆柱
+        const axisOuterGeo = new THREE.CylinderGeometry(0.04, 0.04, 2.8, 8);
+        const axisOuterMat = new THREE.MeshStandardMaterial({ color: 0xaa66ff, emissive: 0x331144, transparent: true, opacity: 0.5 });
+        const axisOuter = new THREE.Mesh(axisOuterGeo, axisOuterMat);
+        axisOuter.position.set(0, 0, 0);
+        axisOuter.rotation.z = 0; // 默认圆柱沿Y轴
+        axisGroup.add(axisOuter);
+        
+        // 内轴 (随动轴) - 用一个小箭头表示，指向不同方向？我们画几个小的环？
+        // 为了不杂乱，只画一个小的箭头表示内轴方向，让它转动？静态展示一个示意即可。
+        // 这里为了美观，省略复杂的内轴动态，仅用文字标签说明。
+
+        // 但我们可以添加几个小箭头显示内轴方向? 算了，保持简洁。
+        scene.add(axisGroup);
+
+        // 添加CSS2D标签
+        function createLabel(text, color, position, fontSize = '16px') {
+            const div = document.createElement('div');
+            div.textContent = text;
+            div.style.color = color;
+            div.style.fontSize = fontSize;
+            div.style.fontWeight = 'bold';
+            div.style.textShadow = '0 0 10px rgba(0,0,0,0.8)';
+            div.style.background = 'rgba(20,20,30,0.7)';
+            div.style.padding = '4px 12px';
+            div.style.borderRadius = '20px';
+            div.style.borderLeft = `3px solid ${color}`;
+            div.style.backdropFilter = 'blur(4px)';
+            const label = new CSS2DObject(div);
+            label.position.copy(position);
+            return label;
+        }
+
+        // 添加几个标签
+        const labelOuter = createLabel('奇异线 θ₂=0', '#ff4466', new THREE.Vector3(1.5 + R + r + 0.2, 0.2, 0), '14px');
+        const labelInner = createLabel('奇异线 θ₂=π', '#ff4466', new THREE.Vector3(1.5 + R - r - 0.2, 0.2, 0), '14px');
+        // 由于环面旋转了，标签位置可能不准，需要基于旋转后的位置调整。干脆不加位置精确的标签，用图例说明即可。
+        // 这里不再添加，图例已经够了。
+
+        // 为了更好地表现“捏扁”的视觉效果，我们可以添加一些粒子或者线条沿着奇异线闪烁？
+        // 或者添加两个红色的圆环光晕。
+        
+        // --- 添加环境星星效果 (简单的粒子) ---
+        const starsGeo = new THREE.BufferGeometry();
+        const starsCount = 1000;
+        const starsPos = new Float32Array(starsCount * 3);
+        for (let i = 0; i < starsCount * 3; i += 3) {
+            starsPos[i] = (Math.random() - 0.5) * 200;
+            starsPos[i+1] = (Math.random() - 0.5) * 200;
+            starsPos[i+2] = (Math.random() - 0.5) * 200;
+        }
+        starsGeo.setAttribute('position', new THREE.BufferAttribute(starsPos, 3));
+        const starsMat = new THREE.PointsMaterial({ color: 0x88aaff, size: 0.15, transparent: true, opacity: 0.6 });
+        const stars = new THREE.Points(starsGeo, starsMat);
+        scene.add(stars);
+
+        // --- 添加一个很淡的雾效，增加景深感 ---
+        scene.fog = new THREE.FogExp2(0x0a0a14, 0.008);
+
+        // --- 动画循环 ---
+        let clock = new THREE.Clock();
+
+        function animate() {
+            const delta = clock.getDelta();
+            const elapsedTime = performance.now() * 0.001; // seconds
+
+            // 自动旋转由 OrbitControls 的 autoRotate 处理
+            controls.update();
+
+            // 让星星缓慢旋转
+            stars.rotation.y += 0.0001;
+            stars.rotation.x += 0.00005;
+
+            // 让环面本身有微小的浮动？或者让奇异线的光晕变化？可以添加脉冲效果。
+            // 对红色管状线的材质进行发光强度脉冲
+            const pulse = Math.sin(elapsedTime * 3) * 0.15 + 0.85;
+            redMat.emissiveIntensity = pulse;
+            
+            // 线框透明度微调
+            wireframeMat.opacity = 0.15 + Math.sin(elapsedTime * 2) * 0.05;
+
+            // 渲染
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // --- 窗口大小自适应 ---
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 开始时自动旋转
+        controls.autoRotate = true;
+        // 点击拖动时暂停自动旋转?  OrbitControls 默认 autoRotate 在用户交互后不会自动停止，我们可以设置
+        // 为了体验更好，用户交互时暂停自动旋转，延迟恢复。
+        let autoRotateTimeout;
+        controls.addEventListener('start', () => {
+            controls.autoRotate = false;
+            if (autoRotateTimeout) clearTimeout(autoRotateTimeout);
+        });
+        controls.addEventListener('end', () => {
+            // 2秒后恢复自动旋转
+            autoRotateTimeout = setTimeout(() => {
+                controls.autoRotate = true;
+            }, 3000);
+        });
+
+    </script>
+</body>
+</html>
